@@ -322,28 +322,29 @@ function initGrid() {
 }
 
 function advanceGrid() {
+  // Só desce os blocos — itens revelados são limpos a cada round
   for (let r = ROWS - 1; r > 0; r--) {
-    grid[r]  = grid[r - 1].map(b => b ? { ...b } : null);
-    items[r] = [...items[r - 1]];
+    grid[r] = grid[r - 1].map(b => b ? { ...b } : null);
   }
-  grid[0]  = new Array(COLS).fill(null);
-  items[0] = new Array(COLS).fill(false);
+  grid[0] = new Array(COLS).fill(null);
 }
 
 function generateNewRow() {
-  const hp = round;
-  const count = 3 + (round <= 3 ? 0 : Math.floor(Math.random() * 3)); // 3-5 blocks
+  const hp    = round;
+  const count = Math.min(3 + (round <= 3 ? 0 : Math.floor(Math.random() * 3)), COLS - 1);
   const cols  = shuffle([...Array(COLS).keys()]);
-  const blockCols = cols.slice(0, Math.min(count, COLS - 1));
+  const blockCols = cols.slice(0, count);
 
-  for (const c of blockCols) grid[0][c] = { hp, maxHp: hp };
-
-  // At least 1 ball item in an empty slot
-  const emptyCols = cols.filter(c => !grid[0][c]);
-  if (emptyCols.length > 0) {
-    items[0][emptyCols[0]] = true;
-    if (emptyCols.length > 1 && Math.random() < 0.45) items[0][emptyCols[1]] = true;
+  // Cria blocos — alguns têm bônus escondido dentro
+  for (const c of blockCols) {
+    grid[0][c] = { hp, maxHp: hp, hasBall: false };
   }
+
+  // 1 (ou 2) blocos recebem bônus escondido
+  const ballCount2 = 1 + (Math.random() < 0.35 ? 1 : 0);
+  shuffle([...blockCols]).slice(0, ballCount2).forEach(c => {
+    if (grid[0][c]) grid[0][c].hasBall = true;
+  });
 }
 
 function shuffle(arr) {
@@ -377,6 +378,8 @@ function nextRound() {
   round++;
   advanceGrid();
   generateNewRow();
+  // Limpa itens revelados (não coletados se perdem no fim do round)
+  items = Array.from({ length: ROWS }, () => new Array(COLS).fill(false));
   ballsFired = 0; ballsReturned = 0;
   firstReturnX = null; collectedBalls = 0;
   launchTimer = 0; stuckTimer = 0;
@@ -392,7 +395,8 @@ function fireBalls() {
 
 function launchOneBall() {
   balls.push({
-    x: launcherX, y: LAUNCH_Y - BALL_R,
+    x: launcherX,
+    y: FLOOR_Y - BALL_R - 1,   // nasce ACIMA da linha do chão
     vx: Math.cos(aimAngle) * BALL_SPEED,
     vy: Math.sin(aimAngle) * BALL_SPEED,
     active: true,
@@ -408,10 +412,11 @@ function returnBall(ball) {
     firstReturnX = Math.max(BALL_R + 2, Math.min(W - BALL_R - 2, ball.x));
   }
   ballsReturned++;
-  if (ballsReturned >= ballCount) resolveRound();
+  if (ballsReturned >= ballCount && gameState !== 'resolving') resolveRound();
 }
 
 function resolveRound() {
+  if (gameState === 'resolving' || gameState === 'over') return;
   gameState = 'resolving';
   if (firstReturnX !== null) launcherXTarget = firstReturnX;
   ballCount += collectedBalls;
@@ -535,6 +540,8 @@ function checkBlockCollisions(ball) {
       score++;
 
       if (blk.hp <= 0) {
+        // Se tinha bônus escondido, revela o item coletável na célula
+        if (blk.hasBall) items[r][c] = true;
         grid[r][c] = null;
         spawnBreakParticles(bx + CELL / 2, by + CELL / 2, tier.color);
         addFloat('+' + round, bx + CELL / 2, by + CELL / 2, tier.color);
@@ -612,10 +619,10 @@ function updateFloats(dt) {
 // ── Aim ───────────────────────────────────────────────────────
 function calcAimAngle(mx, my) {
   const dx = mx - launcherX;
-  const dy = my - LAUNCH_Y;
-  if (dy >= -10) return null;
+  const dy = my - (FLOOR_Y - BALL_R); // referência: posição real da bola
+  if (dy >= -8) return null;           // só aceita cliques acima da bola
   let a = Math.atan2(dy, dx);
-  const MIN = 0.15;
+  const MIN = 0.13;
   if (a > -MIN) a = -MIN;
   if (a < -(Math.PI - MIN)) a = -(Math.PI - MIN);
   return a;
@@ -624,7 +631,7 @@ function calcAimAngle(mx, my) {
 function drawAimLine() {
   if (gameState !== 'aim' || !aimAngle) return;
   const STEP = 5;
-  let x = launcherX, y = LAUNCH_Y - BALL_R;
+  let x = launcherX, y = FLOOR_Y - BALL_R - 1; // mesmo ponto de spawn da bola
   let vx = Math.cos(aimAngle), vy = Math.sin(aimAngle);
   let dotIdx = 0;
 
@@ -728,13 +735,23 @@ function drawBlocks() {
       ctx.lineWidth = 1;
       ctx.stroke();
 
+      // Ícone de bônus escondido (bolinha dentro do bloco)
+      if (blk.hasBall) {
+        const cx2 = x + sz / 2, cy2 = y + sz * 0.78;
+        const pr = sz * 0.1;
+        ctx.beginPath(); ctx.arc(cx2, cy2, pr, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fill();
+        ctx.strokeStyle = 'rgba(0,229,255,0.9)'; ctx.lineWidth = 1.2; ctx.stroke();
+      }
+
       // HP number
+      const yOff = blk.hasBall ? -sz * 0.06 : 0;
       const fontSize = blk.hp >= 1000 ? sz * 0.28 : blk.hp >= 100 ? sz * 0.32 : sz * 0.38;
       ctx.fillStyle = 'rgba(255,255,255,0.92)';
       ctx.font = `900 ${fontSize}px 'Arial Rounded MT Bold', Arial, sans-serif`;
       ctx.textAlign    = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(blk.hp, x + sz / 2, y + sz / 2 + 1);
+      ctx.fillText(blk.hp, x + sz / 2, y + sz / 2 + yOff + 1);
     }
   }
 }
@@ -916,13 +933,14 @@ function loop(ts) {
   if (gameState === 'firing' || gameState === 'simulating') {
     stuckTimer += dt * 1000;
     if (stuckTimer >= STUCK_MS) {
-      // Force all active balls to return
+      stuckTimer = 0;
+      // Força retorno de todas as bolas ativas (anti-travamento)
       for (const b of balls) if (b.active) {
         b.active = false;
         if (firstReturnX === null) firstReturnX = Math.max(BALL_R + 2, Math.min(W - BALL_R - 2, b.x));
         ballsReturned++;
       }
-      if (ballsReturned > 0) resolveRound();
+      resolveRound();
     }
   }
 
