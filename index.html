@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Broken Ball</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      background: #0f0f23;
+      overflow: hidden;
+      font-family: 'Arial Rounded MT Bold', 'Arial Black', Arial, sans-serif;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #app {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      background: #0f0f23;
+    }
+    canvas { display: block; cursor: crosshair; }
+
+    /* ── Overlays ── */
+    .overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(8, 8, 30, 0.96);
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      z-index: 200;
+    }
+    .overlay.show { display: flex; }
+
+    .ov-title {
+      font-size: 2.4rem;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-align: center;
+      line-height: 1.15;
+    }
+    .ov-sub {
+      color: rgba(200,200,255,0.55);
+      font-size: 0.8rem;
+      text-align: center;
+      max-width: 280px;
+      line-height: 1.5;
+    }
+    .ov-btn {
+      padding: 13px 44px;
+      background: rgba(255,255,255,0.08);
+      border: 2px solid rgba(255,255,255,0.4);
+      border-radius: 50px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 0.92rem;
+      font-weight: 800;
+      cursor: pointer;
+      letter-spacing: 0.08em;
+      transition: background 0.18s, box-shadow 0.18s;
+    }
+    .ov-btn:hover { background: rgba(255,255,255,0.18); box-shadow: 0 0 22px rgba(255,255,255,0.2); }
+    .ov-btn.accent { background: rgba(255,200,0,0.15); border-color: #ffc800; color: #ffc800; }
+    .ov-btn.accent:hover { background: rgba(255,200,0,0.28); box-shadow: 0 0 22px rgba(255,200,0,0.3); }
+    .ov-btn.green  { background: rgba(0,255,120,0.1);  border-color: #00ff78; color: #00ff78; }
+    .ov-btn.green:hover  { background: rgba(0,255,120,0.22); }
+    .ov-btn.red    { background: rgba(255,60,60,0.1);  border-color: #ff3c3c; color: #ff3c3c; }
+    .ov-btn.dim    { background: none; border-color: rgba(255,255,255,0.18); color: rgba(255,255,255,0.4); font-size: 0.72rem; padding: 9px 22px; }
+    .ov-btn.dim:hover { background: rgba(255,255,255,0.06); }
+
+    .ov-stats {
+      display: flex; gap: 22px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px;
+      padding: 12px 22px;
+    }
+    .ov-stat { text-align: center; }
+    .ov-stat-val { display: block; font-size: 1.2rem; font-weight: 900; }
+    .ov-stat-lbl { display: block; font-size: 0.52rem; color: rgba(200,200,255,0.45); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+
+    /* ── Auth ── */
+    .auth-tabs {
+      display: flex; gap: 0; margin-bottom: 8px;
+      border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; overflow: hidden;
+    }
+    .auth-tab {
+      flex: 1; padding: 9px; background: transparent;
+      border: none; color: rgba(255,255,255,0.4);
+      font-family: inherit; font-size: 0.72rem; font-weight: 800;
+      letter-spacing: 0.06em; cursor: pointer; transition: 0.15s;
+    }
+    .auth-tab.active { background: rgba(255,255,255,0.1); color: #fff; }
+    .auth-form { display: flex; flex-direction: column; gap: 9px; width: 280px; }
+    .auth-input {
+      padding: 11px 13px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 8px; color: #fff;
+      font-family: inherit; font-size: 0.82rem; outline: none; transition: border-color 0.15s;
+    }
+    .auth-input:focus { border-color: #ffc800; }
+    .auth-input::placeholder { color: rgba(255,255,255,0.25); }
+    .auth-msg { font-size: 0.68rem; text-align: center; min-height: 18px; font-weight: 600; }
+    .auth-msg.err { color: #ff5555; } .auth-msg.ok { color: #00ff88; }
+    .auth-divider { font-size: 0.6rem; color: rgba(255,255,255,0.25); text-align: center; letter-spacing: 0.06em; }
+
+    /* ── Dashboard ── */
+    #ovDashboard { padding: 16px 12px; justify-content: flex-start; overflow-y: auto; scrollbar-width: none; }
+    #ovDashboard::-webkit-scrollbar { display: none; }
+    .dash-card {
+      width: 100%; max-width: 320px;
+      background: rgba(255,200,0,0.07);
+      border: 1px solid rgba(255,200,0,0.4);
+      border-radius: 14px; padding: 14px 18px;
+      display: flex; align-items: center; gap: 14px;
+    }
+    .dash-badge {
+      min-width: 54px; height: 54px; border-radius: 50%;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      border: 2px solid rgba(255,200,0,0.5); background: rgba(255,200,0,0.1); flex-shrink: 0;
+    }
+    .dash-badge .bp { font-size: 1.1rem; font-weight: 900; color: #ffc800; line-height: 1; }
+    .dash-badge .bl { font-size: 0.42rem; color: rgba(255,200,0,0.55); text-transform: uppercase; letter-spacing: 0.05em; }
+    .dash-badge.gold   { border-color: #ffd700; background: rgba(255,215,0,0.15); }
+    .dash-badge.gold .bp { color: #ffd700; }
+    .dash-badge.silver { border-color: #ccc; background: rgba(204,204,204,0.12); }
+    .dash-badge.silver .bp { color: #ccc; }
+    .dash-badge.bronze { border-color: #cd7f32; background: rgba(205,127,50,0.12); }
+    .dash-badge.bronze .bp { color: #cd7f32; }
+    .dash-info { flex: 1; }
+    .dash-name { font-size: 0.95rem; font-weight: 900; color: #fff; }
+    .dash-mini-stats { display: flex; gap: 12px; margin-top: 6px; }
+    .dms-val { font-size: 0.85rem; font-weight: 900; display: block; }
+    .dms-lbl { font-size: 0.45rem; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.06em; }
+    .dash-sec { font-size: 0.6rem; color: rgba(255,255,255,0.35); letter-spacing: 0.1em; text-transform: uppercase; width: 100%; max-width: 320px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 4px; }
+    #dashRankList { width: 100%; max-width: 320px; display: flex; flex-direction: column; gap: 5px; max-height: 36vh; overflow-y: auto; scrollbar-width: none; }
+    #dashRankList::-webkit-scrollbar { display: none; }
+    .rr { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); font-size: 0.72rem; }
+    .rr.me { border-color: rgba(255,200,0,0.4); background: rgba(255,200,0,0.07); }
+    .rr-pos { width: 22px; text-align: center; font-weight: 900; color: rgba(255,255,255,0.4); }
+    .rr-pos.gold { color: #ffd700; } .rr-pos.silver { color: #ccc; } .rr-pos.bronze { color: #cd7f32; }
+    .rr-name { flex: 1; color: #fff; font-weight: 700; }
+    .rr-round { color: #00d4ff; font-size: 0.62rem; }
+    .rr-score { color: #ffc800; font-weight: 800; }
+    .dash-btns { display: flex; flex-direction: column; align-items: center; gap: 9px; width: 100%; max-width: 320px; }
+    .dash-logout { background: none; border: none; color: rgba(255,255,255,0.3); font-family: inherit; font-size: 0.62rem; cursor: pointer; }
+    .dash-logout:hover { color: #ff5555; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <canvas id="canvas"></canvas>
+</div>
+
+<!-- ── Start Screen ── -->
+<div class="overlay show" id="ovStart">
+  <div class="ov-title" style="background:linear-gradient(135deg,#ff6b35,#ffc800,#00e676);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">BROKEN<br>BALL</div>
+  <div class="ov-sub">Mire, dispare, destrua os blocos.<br>Cada rodada eles ficam mais fortes!</div>
+  <div id="startBtnsLogado" style="display:none;flex-direction:column;align-items:center;gap:9px">
+    <button class="ov-btn accent" onclick="startGame()">▶ JOGAR</button>
+    <button class="ov-btn dim" onclick="showAuth('login')">Trocar conta</button>
+  </div>
+  <div id="startBtnsDeslogado" style="display:flex;flex-direction:column;align-items:center;gap:9px">
+    <button class="ov-btn accent" onclick="showAuth('login')">🔑 ENTRAR</button>
+    <button class="ov-btn green" onclick="showAuth('signup')">✚ CRIAR CONTA</button>
+    <button class="ov-btn dim" onclick="startGame()">Jogar sem conta</button>
+  </div>
+</div>
+
+<!-- ── Auth ── -->
+<div class="overlay" id="ovAuth">
+  <div class="ov-title" style="font-size:1.6rem;color:#ffc800">⚡ BROKEN BALL</div>
+  <div class="auth-tabs">
+    <button class="auth-tab active" id="tabLogin" onclick="switchTab('login')">ENTRAR</button>
+    <button class="auth-tab" id="tabSignup" onclick="switchTab('signup')">CADASTRAR</button>
+  </div>
+  <div id="formLogin" class="auth-form">
+    <input class="auth-input" type="email" id="loginEmail" placeholder="E-mail">
+    <input class="auth-input" type="password" id="loginPass" placeholder="Senha">
+    <button class="ov-btn accent" onclick="doSignIn()" style="padding:10px">Entrar</button>
+    <div class="auth-msg" id="loginMsg"></div>
+  </div>
+  <div id="formSignup" class="auth-form" style="display:none">
+    <input class="auth-input" type="text" id="signupUser" placeholder="Nome de jogador">
+    <input class="auth-input" type="email" id="signupEmail" placeholder="E-mail">
+    <input class="auth-input" type="password" id="signupPass" placeholder="Senha (mín. 6 caracteres)">
+    <button class="ov-btn green" onclick="doSignUp()" style="padding:10px">Criar conta</button>
+    <div class="auth-msg" id="signupMsg"></div>
+  </div>
+  <div class="auth-divider">── ou ──</div>
+  <button onclick="hideOverlays();document.getElementById('ovStart').classList.add('show')" style="background:none;border:none;color:rgba(255,255,255,0.3);font-family:inherit;font-size:0.65rem;cursor:pointer">← Voltar</button>
+</div>
+
+<!-- ── Dashboard pós-login ── -->
+<div class="overlay" id="ovDashboard" style="gap:12px">
+  <div class="ov-title" style="font-size:1.3rem;background:linear-gradient(135deg,#ff6b35,#ffc800);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:0">BROKEN BALL</div>
+  <div class="dash-card">
+    <div class="dash-badge" id="dashBadge">
+      <span class="bp" id="dashPos">—</span>
+      <span class="bl">rank</span>
+    </div>
+    <div class="dash-info">
+      <div class="dash-name" id="dashName">—</div>
+      <div class="dash-mini-stats">
+        <div><span class="dms-val" id="dashBestRound" style="color:#00d4ff">0</span><span class="dms-lbl">Melhor round</span></div>
+        <div><span class="dms-val" id="dashBestScore" style="color:#ffc800">0</span><span class="dms-lbl">Recorde</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="dash-sec">🏆 Ranking Global</div>
+  <div id="dashRankList"><div class="ov-sub">Carregando...</div></div>
+  <div class="dash-btns">
+    <button class="ov-btn accent" onclick="startGame()" style="width:100%;max-width:320px">▶ JOGAR AGORA</button>
+    <button class="dash-logout" onclick="doSignOut()">↩ Sair da conta</button>
+  </div>
+</div>
+
+<!-- ── Game Over ── -->
+<div class="overlay" id="ovGameOver">
+  <div class="ov-title" style="color:#ff5555;font-size:2rem">💥 GAME<br>OVER</div>
+  <div class="ov-stats" id="goStats"></div>
+  <div id="goRecordMsg" style="font-size:0.75rem;font-weight:800;color:#ffc800;min-height:20px;text-align:center"></div>
+  <button class="ov-btn accent" onclick="startGame()">▶ JOGAR NOVAMENTE</button>
+  <button class="ov-btn dim" id="goDashBtn" onclick="showDashboard()" style="display:none">🏆 Ver Ranking</button>
+  <button class="ov-btn dim" onclick="goToMenu()">← Menu</button>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  BROKEN BALL  —  Arcade Brick Breaker  |  v1.0
+// ═══════════════════════════════════════════════════════════════
+
+// ── Canvas Setup ──────────────────────────────────────────────
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d');
+
+const COLS       = 7;
+const ROWS       = 10;
+const BALL_SPEED = 560;
+const BALL_R     = 7;
+const LAUNCH_MS  = 85;    // ms between ball launches
+const STUCK_MS   = 14000; // force return if stuck this long
+
+let W, H, CELL, TOP_H, FLOOR_Y, LAUNCH_Y;
+
+function setupCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  W    = Math.min(window.innerWidth, 420);
+  CELL = Math.floor(W / COLS);
+  W    = CELL * COLS;
+  TOP_H    = 52;
+  FLOOR_Y  = TOP_H + ROWS * CELL;
+  LAUNCH_Y = FLOOR_Y + 36;
+  H        = FLOOR_Y + 70;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.scale(dpr, dpr);
+}
+
+// ── State ────────────────────────────────────────────────────
+// 'menu' | 'aim' | 'firing' | 'simulating' | 'resolving' | 'over'
+let gameState = 'menu';
+let round = 0, score = 0, ballCount = 1, collectedBalls = 0;
+let highScore  = parseInt(localStorage.getItem('bbHigh')  || '0');
+let bestRound  = parseInt(localStorage.getItem('bbRound') || '0');
+
+// Grid
+let grid  = []; // grid[r][c]  = {hp, maxHp} | null
+let items = []; // items[r][c] = true | false
+
+// Balls & FX
+let balls      = [];
+let particles  = [];
+let floatTexts = [];
+
+// Launcher
+let launcherX       = 0;
+let launcherXTarget = 0;
+let aimAngle        = null;
+let aimTarget       = null;
+
+// Round tracking
+let ballsFired    = 0;
+let ballsReturned = 0;
+let firstReturnX  = null;
+let launchTimer   = 0;
+let stuckTimer    = 0;
+
+// RAF
+let frameId = null;
+let lastTs  = 0;
+
+// ── Block Colors ─────────────────────────────────────────────
+const TIERS = [
+  { max: 5,   color: '#00e676', dark: '#00a152' }, // green
+  { max: 15,  color: '#00e5ff', dark: '#0097b8' }, // cyan
+  { max: 30,  color: '#ffea00', dark: '#b8a900' }, // yellow
+  { max: 55,  color: '#ff9100', dark: '#b86500' }, // orange
+  { max: 90,  color: '#ff1744', dark: '#b2102f' }, // red
+  { max: 140, color: '#e040fb', dark: '#9c27b0' }, // magenta
+  { max: Infinity, color: '#7c4dff', dark: '#4527a0' }, // purple
+];
+
+function blockColor(hp) {
+  return TIERS.find(t => hp <= t.max) || TIERS[TIERS.length - 1];
+}
+
+// ── Grid Init ────────────────────────────────────────────────
+function initGrid() {
+  grid  = Array.from({ length: ROWS }, () => new Array(COLS).fill(null));
+  items = Array.from({ length: ROWS }, () => new Array(COLS).fill(false));
+}
+
+function advanceGrid() {
+  for (let r = ROWS - 1; r > 0; r--) {
+    grid[r]  = grid[r - 1].map(b => b ? { ...b } : null);
+    items[r] = [...items[r - 1]];
+  }
+  grid[0]  = new Array(COLS).fill(null);
+  items[0] = new Array(COLS).fill(false);
+}
+
+function generateNewRow() {
+  const hp = round;
+  const count = 3 + (round <= 3 ? 0 : Math.floor(Math.random() * 3)); // 3-5 blocks
+  const cols  = shuffle([...Array(COLS).keys()]);
+  const blockCols = cols.slice(0, Math.min(count, COLS - 1));
+
+  for (const c of blockCols) grid[0][c] = { hp, maxHp: hp };
+
+  // At least 1 ball item in an empty slot
+  const emptyCols = cols.filter(c => !grid[0][c]);
+  if (emptyCols.length > 0) {
+    items[0][emptyCols[0]] = true;
+    if (emptyCols.length > 1 && Math.random() < 0.45) items[0][emptyCols[1]] = true;
+  }
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function checkGameOver() {
+  return grid[ROWS - 1].some(b => b !== null);
+}
+
+// ── Game Flow ────────────────────────────────────────────────
+function startGame() {
+  hideOverlays();
+  initGrid();
+  round = 0; score = 0; ballCount = 1; collectedBalls = 0;
+  balls = []; particles = []; floatTexts = [];
+  launcherX = launcherXTarget = W / 2;
+  firstReturnX = null;
+  nextRound();
+  gameState = 'aim';
+  if (frameId) cancelAnimationFrame(frameId);
+  lastTs = 0;
+  frameId = requestAnimationFrame(loop);
+}
+
+function nextRound() {
+  round++;
+  advanceGrid();
+  generateNewRow();
+  ballsFired = 0; ballsReturned = 0;
+  firstReturnX = null; collectedBalls = 0;
+  launchTimer = 0; stuckTimer = 0;
+  balls = [];
+}
+
+function fireBalls() {
+  if (!aimAngle) return;
+  gameState  = 'firing';
+  ballsFired = 0; ballsReturned = 0;
+  launchTimer = 0;
+}
+
+function launchOneBall() {
+  balls.push({
+    x: launcherX, y: LAUNCH_Y - BALL_R,
+    vx: Math.cos(aimAngle) * BALL_SPEED,
+    vy: Math.sin(aimAngle) * BALL_SPEED,
+    active: true,
+    trail: [],
+  });
+  ballsFired++;
+}
+
+function returnBall(ball) {
+  if (!ball.active) return;
+  ball.active = false;
+  if (firstReturnX === null) {
+    firstReturnX = Math.max(BALL_R + 2, Math.min(W - BALL_R - 2, ball.x));
+  }
+  ballsReturned++;
+  if (ballsReturned >= ballCount) resolveRound();
+}
+
+function resolveRound() {
+  gameState = 'resolving';
+  if (firstReturnX !== null) launcherXTarget = firstReturnX;
+  ballCount += collectedBalls;
+  score += 10; // round clear bonus
+  saveHighScore();
+  saveScoreCloud();
+  if (checkGameOver()) {
+    setTimeout(() => endGame(), 500);
+    return;
+  }
+  setTimeout(() => {
+    nextRound();
+    gameState = 'aim';
+  }, 700);
+}
+
+function endGame() {
+  gameState = 'over';
+  cancelAnimationFrame(frameId); frameId = null;
+  saveHighScore();
+  saveScoreCloud();
+  const isHigh  = score     >= highScore  && score > 0;
+  const isRound = round - 1 >= bestRound  && round > 1;
+  document.getElementById('goStats').innerHTML = `
+    <div class="ov-stat"><span class="ov-stat-val" style="color:#00d4ff">${round - 1}</span><span class="ov-stat-lbl">Round</span></div>
+    <div class="ov-stat"><span class="ov-stat-val" style="color:#ffc800">${score}</span><span class="ov-stat-lbl">Score</span></div>
+    <div class="ov-stat"><span class="ov-stat-val" style="color:#00ff88">${ballCount}</span><span class="ov-stat-lbl">Bolas</span></div>`;
+  const msg = (isHigh && isRound) ? '🏆 Novo recorde de score E round!' :
+              isHigh  ? '🏆 Novo recorde de score!' :
+              isRound ? '🔥 Novo recorde de rounds!' : '';
+  document.getElementById('goRecordMsg').textContent = msg;
+  document.getElementById('goDashBtn').style.display = supaUser ? 'block' : 'none';
+  hideOverlays();
+  document.getElementById('ovGameOver').classList.add('show');
+}
+
+function goToMenu() {
+  if (frameId) { cancelAnimationFrame(frameId); frameId = null; }
+  gameState = 'menu';
+  hideOverlays();
+  updateStartScreen();
+}
+
+// ── Save High Score ──────────────────────────────────────────
+function saveHighScore() {
+  if (round - 1 > bestRound) {
+    bestRound = round - 1;
+    localStorage.setItem('bbRound', bestRound);
+  }
+  if (score > highScore) {
+    highScore = score;
+    localStorage.setItem('bbHigh', highScore);
+  }
+}
+
+// ── Physics Update ───────────────────────────────────────────
+function updateBalls(dt) {
+  for (const ball of balls) {
+    if (!ball.active) continue;
+
+    // Trail
+    ball.trail.push({ x: ball.x, y: ball.y });
+    if (ball.trail.length > 7) ball.trail.shift();
+
+    ball.x += ball.vx * dt;
+    ball.y += ball.vy * dt;
+
+    // Wall collisions
+    if (ball.x - BALL_R < 0)     { ball.x = BALL_R;     ball.vx =  Math.abs(ball.vx); }
+    if (ball.x + BALL_R > W)     { ball.x = W - BALL_R; ball.vx = -Math.abs(ball.vx); }
+    if (ball.y - BALL_R < TOP_H) { ball.y = TOP_H + BALL_R; ball.vy = Math.abs(ball.vy); }
+
+    // Floor → return
+    if (ball.y + BALL_R >= FLOOR_Y) {
+      spawnReturnParticles(ball.x, FLOOR_Y);
+      returnBall(ball);
+      continue;
+    }
+
+    // Block & item collisions
+    checkBlockCollisions(ball);
+    checkItemCollisions(ball);
+  }
+}
+
+function circleAABB(cx, cy, cr, rx, ry, rw, rh) {
+  const nx = Math.max(rx, Math.min(cx, rx + rw));
+  const ny = Math.max(ry, Math.min(cy, ry + rh));
+  const dx = cx - nx, dy = cy - ny;
+  return dx * dx + dy * dy < cr * cr;
+}
+
+function checkBlockCollisions(ball) {
+  const r1 = Math.max(0,        Math.floor((ball.y - BALL_R - TOP_H) / CELL));
+  const r2 = Math.min(ROWS - 1, Math.floor((ball.y + BALL_R - TOP_H) / CELL));
+  const c1 = Math.max(0,        Math.floor((ball.x - BALL_R) / CELL));
+  const c2 = Math.min(COLS - 1, Math.floor((ball.x + BALL_R) / CELL));
+
+  for (let r = r1; r <= r2; r++) {
+    for (let c = c1; c <= c2; c++) {
+      const blk = grid[r][c];
+      if (!blk) continue;
+      const bx = c * CELL, by = TOP_H + r * CELL;
+      if (!circleAABB(ball.x, ball.y, BALL_R, bx, by, CELL, CELL)) continue;
+
+      // Determine reflection axis
+      const oL = (ball.x + BALL_R) - bx;
+      const oR = (bx + CELL) - (ball.x - BALL_R);
+      const oT = (ball.y + BALL_R) - by;
+      const oB = (by + CELL) - (ball.y - BALL_R);
+      const mo = Math.min(oL, oR, oT, oB);
+
+      if (mo === oT) { ball.vy = -Math.abs(ball.vy); ball.y = by - BALL_R; }
+      else if (mo === oB) { ball.vy =  Math.abs(ball.vy); ball.y = by + CELL + BALL_R; }
+      else if (mo === oL) { ball.vx = -Math.abs(ball.vx); ball.x = bx - BALL_R; }
+      else               { ball.vx =  Math.abs(ball.vx); ball.x = bx + CELL + BALL_R; }
+
+      const tier = blockColor(blk.hp);
+      spawnHitParticles(bx + CELL / 2, by + CELL / 2, tier.color);
+      blk.hp--;
+      score++;
+
+      if (blk.hp <= 0) {
+        grid[r][c] = null;
+        spawnBreakParticles(bx + CELL / 2, by + CELL / 2, tier.color);
+        addFloat('+' + round, bx + CELL / 2, by + CELL / 2, tier.color);
+        score += round;
+      }
+      return; // one collision per ball per frame
+    }
+  }
+}
+
+function checkItemCollisions(ball) {
+  const r = Math.floor((ball.y - TOP_H) / CELL);
+  const c = Math.floor(ball.x / CELL);
+  if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return;
+  if (!items[r][c]) return;
+  const ix = c * CELL + CELL / 2, iy = TOP_H + r * CELL + CELL / 2;
+  const dx = ball.x - ix, dy = ball.y - iy;
+  if (dx * dx + dy * dy < (BALL_R + CELL * 0.32) ** 2) {
+    items[r][c] = false;
+    collectedBalls++;
+    spawnCollectParticles(ix, iy);
+    addFloat('+1 🔵', ix, iy, '#00e5ff');
+  }
+}
+
+// ── Particles ─────────────────────────────────────────────────
+function spawnHitParticles(x, y, color) {
+  for (let i = 0; i < 4; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const s = 80 + Math.random() * 120;
+    particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, maxLife: 1, color, size: 2.5 + Math.random() * 2, shape: 'sq' });
+  }
+}
+function spawnBreakParticles(x, y, color) {
+  for (let i = 0; i < 14; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const s = 100 + Math.random() * 220;
+    particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, maxLife: 1, color, size: 3 + Math.random() * 4, shape: Math.random() < 0.5 ? 'sq' : 'ci' });
+  }
+}
+function spawnCollectParticles(x, y) {
+  for (let i = 0; i < 8; i++) {
+    const a = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI;
+    particles.push({ x, y, vx: Math.cos(a) * 120, vy: Math.sin(a) * 140, life: 1, maxLife: 1, color: '#00e5ff', size: 3, shape: 'ci' });
+  }
+}
+function spawnReturnParticles(x, y) {
+  for (let i = 0; i < 3; i++) {
+    const a = -Math.PI + Math.random() * Math.PI;
+    particles.push({ x, y, vx: Math.cos(a) * 60, vy: Math.sin(a) * 80 - 40, life: 0.6, maxLife: 0.6, color: '#fff', size: 2, shape: 'ci' });
+  }
+}
+
+function updateParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.vy += 400 * dt;
+    p.life -= dt * 1.8;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function addFloat(text, x, y, color) {
+  floatTexts.push({ text, x, y, vy: -55, life: 1.1, maxLife: 1.1, color });
+}
+function updateFloats(dt) {
+  for (let i = floatTexts.length - 1; i >= 0; i--) {
+    const f = floatTexts[i];
+    f.y += f.vy * dt; f.life -= dt * 1.2;
+    if (f.life <= 0) floatTexts.splice(i, 1);
+  }
+}
+
+// ── Aim ───────────────────────────────────────────────────────
+function calcAimAngle(mx, my) {
+  const dx = mx - launcherX;
+  const dy = my - LAUNCH_Y;
+  if (dy >= -10) return null;
+  let a = Math.atan2(dy, dx);
+  const MIN = 0.15;
+  if (a > -MIN) a = -MIN;
+  if (a < -(Math.PI - MIN)) a = -(Math.PI - MIN);
+  return a;
+}
+
+function drawAimLine() {
+  if (gameState !== 'aim' || !aimAngle) return;
+  const STEP = 5;
+  let x = launcherX, y = LAUNCH_Y - BALL_R;
+  let vx = Math.cos(aimAngle), vy = Math.sin(aimAngle);
+  let dotIdx = 0;
+
+  for (let i = 0; i < 3000; i++) {
+    x += vx * STEP; y += vy * STEP;
+    if (x <= BALL_R)     { x = BALL_R;     vx =  Math.abs(vx); }
+    if (x >= W - BALL_R) { x = W - BALL_R; vx = -Math.abs(vx); }
+    if (y <= TOP_H + BALL_R) { y = TOP_H + BALL_R; vy = Math.abs(vy); }
+    if (y >= FLOOR_Y) break;
+
+    // Stop at first block
+    const bc = Math.floor(x / CELL);
+    const br = Math.floor((y - TOP_H) / CELL);
+    if (br >= 0 && br < ROWS && bc >= 0 && bc < COLS && grid[br][bc]) {
+      ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,200,0,0.9)'; ctx.fill();
+      break;
+    }
+
+    if (i % 5 === 0) {
+      const alpha = 0.55 - dotIdx * 0.004;
+      if (alpha <= 0) break;
+      ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${alpha})`; ctx.fill();
+      dotIdx++;
+    }
+  }
+}
+
+// ── Draw ──────────────────────────────────────────────────────
+function drawBackground() {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0,   '#0f0f23');
+  g.addColorStop(0.5, '#12122b');
+  g.addColorStop(1,   '#0d0d1e');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawGrid() {
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.lineWidth = 0.5;
+  for (let r = 0; r <= ROWS; r++) {
+    ctx.beginPath(); ctx.moveTo(0, TOP_H + r * CELL); ctx.lineTo(W, TOP_H + r * CELL); ctx.stroke();
+  }
+  for (let c = 0; c <= COLS; c++) {
+    ctx.beginPath(); ctx.moveTo(c * CELL, TOP_H); ctx.lineTo(c * CELL, FLOOR_Y); ctx.stroke();
+  }
+  // Floor line
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, FLOOR_Y); ctx.lineTo(W, FLOOR_Y); ctx.stroke();
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function drawBlocks() {
+  const PAD = 3;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const blk = grid[r][c];
+      if (!blk) continue;
+      const x  = c * CELL + PAD;
+      const y  = TOP_H + r * CELL + PAD;
+      const sz = CELL - PAD * 2;
+      const tier = blockColor(blk.hp);
+
+      // Damage ratio (0=full hp, 1=almost dead)
+      const dmgRatio = 1 - blk.hp / blk.maxHp;
+
+      // Block fill
+      const g = ctx.createLinearGradient(x, y, x, y + sz);
+      g.addColorStop(0, tier.color);
+      g.addColorStop(1, tier.dark);
+      roundRect(ctx, x, y, sz, sz, 6);
+      ctx.fillStyle = g;
+      ctx.fill();
+
+      // Damage darkening
+      if (dmgRatio > 0.5) {
+        roundRect(ctx, x, y, sz, sz, 6);
+        ctx.fillStyle = `rgba(0,0,0,${(dmgRatio - 0.5) * 0.6})`;
+        ctx.fill();
+      }
+
+      // Border
+      roundRect(ctx, x, y, sz, sz, 6);
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // HP number
+      const fontSize = blk.hp >= 1000 ? sz * 0.28 : blk.hp >= 100 ? sz * 0.32 : sz * 0.38;
+      ctx.fillStyle = 'rgba(255,255,255,0.92)';
+      ctx.font = `900 ${fontSize}px 'Arial Rounded MT Bold', Arial, sans-serif`;
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(blk.hp, x + sz / 2, y + sz / 2 + 1);
+    }
+  }
+}
+
+function drawItems() {
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (!items[r][c]) continue;
+      const cx = c * CELL + CELL / 2;
+      const cy = TOP_H + r * CELL + CELL / 2;
+      const rad = CELL * 0.28;
+
+      // Glow
+      const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad * 2.2);
+      glow.addColorStop(0,   'rgba(0,229,255,0.25)');
+      glow.addColorStop(1,   'rgba(0,229,255,0)');
+      ctx.beginPath(); ctx.arc(cx, cy, rad * 2.2, 0, Math.PI * 2);
+      ctx.fillStyle = glow; ctx.fill();
+
+      // Circle
+      ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,229,255,0.15)'; ctx.fill();
+      ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 1.5; ctx.stroke();
+
+      // "+" text
+      ctx.fillStyle = '#00e5ff';
+      ctx.font = `900 ${rad * 1.1}px 'Arial Rounded MT Bold', Arial, sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('+', cx, cy + 1);
+    }
+  }
+}
+
+function drawBalls() {
+  for (const ball of balls) {
+    if (!ball.active) continue;
+
+    // Trail
+    for (let i = 0; i < ball.trail.length; i++) {
+      const t = ball.trail[i];
+      const alpha = (i + 1) / (ball.trail.length + 1) * 0.35;
+      const size  = BALL_R * (i + 1) / (ball.trail.length + 1) * 0.7;
+      ctx.beginPath(); ctx.arc(t.x, t.y, size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,240,100,${alpha})`; ctx.fill();
+    }
+
+    // Glow
+    const glow = ctx.createRadialGradient(ball.x, ball.y, 0, ball.x, ball.y, BALL_R * 2.5);
+    glow.addColorStop(0, 'rgba(255,255,200,0.4)');
+    glow.addColorStop(1, 'rgba(255,255,200,0)');
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, BALL_R * 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = glow; ctx.fill();
+
+    // Ball
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, BALL_R, 0, Math.PI * 2);
+    ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,240,100,0.6)'; ctx.lineWidth = 1.5; ctx.stroke();
+  }
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    const alpha = Math.max(0, p.life / p.maxLife);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color;
+    if (p.shape === 'ci') {
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+    } else {
+      ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawFloats() {
+  for (const f of floatTexts) {
+    ctx.globalAlpha = Math.max(0, f.life / f.maxLife);
+    ctx.fillStyle = f.color;
+    ctx.font = `800 13px 'Arial Rounded MT Bold', Arial, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(f.text, f.x, f.y);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawLauncher() {
+  const x = launcherX, y = LAUNCH_Y;
+
+  // Platform dot
+  ctx.beginPath(); ctx.arc(x, FLOOR_Y + 3, 3, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fill();
+
+  // Arrow in aim direction
+  if (aimAngle && (gameState === 'aim')) {
+    const len = 22;
+    const ax = x + Math.cos(aimAngle) * len;
+    const ay = y + Math.sin(aimAngle) * len;
+    ctx.strokeStyle = 'rgba(255,200,0,0.7)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ax, ay); ctx.stroke();
+    // Arrowhead
+    const headLen = 8;
+    const headAngle = 0.45;
+    const a1 = aimAngle + Math.PI - headAngle;
+    const a2 = aimAngle + Math.PI + headAngle;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax + Math.cos(a1) * headLen, ay + Math.sin(a1) * headLen);
+    ctx.lineTo(ax + Math.cos(a2) * headLen, ay + Math.sin(a2) * headLen);
+    ctx.closePath(); ctx.fillStyle = 'rgba(255,200,0,0.7)'; ctx.fill();
+  }
+
+  // Ball count indicator
+  ctx.beginPath(); ctx.arc(x, y, BALL_R + 1, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff'; ctx.fill();
+  ctx.strokeStyle = '#ffc800'; ctx.lineWidth = 2; ctx.stroke();
+
+  // Ball count number below
+  ctx.fillStyle = '#ffc800';
+  ctx.font = `800 11px 'Arial Rounded MT Bold', Arial, sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillText('×' + ballCount, x, y + BALL_R + 5);
+}
+
+function drawHUD() {
+  // HUD background
+  ctx.fillStyle = 'rgba(8,8,28,0.9)';
+  ctx.fillRect(0, 0, W, TOP_H);
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(0, TOP_H); ctx.lineTo(W, TOP_H); ctx.stroke();
+
+  const items2 = [
+    { label: 'ROUND', value: round,     color: '#00d4ff' },
+    { label: 'SCORE', value: score,     color: '#ffc800' },
+    { label: 'BOLAS', value: ballCount, color: '#00ff88' },
+  ];
+  const colW = W / items2.length;
+  ctx.textAlign = 'center';
+  items2.forEach((it, i) => {
+    const cx = colW * i + colW / 2;
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.font = `700 9px 'Arial Rounded MT Bold', Arial, sans-serif`;
+    ctx.textBaseline = 'top';
+    ctx.fillText(it.label, cx, 6);
+    ctx.fillStyle = it.color;
+    ctx.font = `900 18px 'Arial Rounded MT Bold', Arial, sans-serif`;
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(it.value, cx, TOP_H - 8);
+  });
+}
+
+function drawStateMsg() {
+  if (gameState === 'resolving') {
+    ctx.fillStyle = 'rgba(0,229,255,0.7)';
+    ctx.font = `800 13px 'Arial Rounded MT Bold', Arial, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('ROUND ' + round + ' — Complete!', W / 2, FLOOR_Y + 18);
+  }
+}
+
+// ── Main Loop ─────────────────────────────────────────────────
+function loop(ts) {
+  frameId = requestAnimationFrame(loop);
+  const dt = Math.min((ts - (lastTs || ts)) / 1000, 0.05);
+  lastTs = ts;
+
+  // Launcher smooth slide
+  launcherX += (launcherXTarget - launcherX) * Math.min(1, dt * 9);
+
+  if (gameState === 'firing') {
+    launchTimer += dt * 1000;
+    if (launchTimer >= LAUNCH_MS) {
+      launchTimer -= LAUNCH_MS;
+      launchOneBall();
+      if (ballsFired >= ballCount) gameState = 'simulating';
+    }
+  }
+
+  if (gameState === 'firing' || gameState === 'simulating') {
+    stuckTimer += dt * 1000;
+    if (stuckTimer >= STUCK_MS) {
+      // Force all active balls to return
+      for (const b of balls) if (b.active) {
+        b.active = false;
+        if (firstReturnX === null) firstReturnX = Math.max(BALL_R + 2, Math.min(W - BALL_R - 2, b.x));
+        ballsReturned++;
+      }
+      if (ballsReturned > 0) resolveRound();
+    }
+  }
+
+  if (gameState !== 'menu' && gameState !== 'over') {
+    updateBalls(dt);
+    updateParticles(dt);
+    updateFloats(dt);
+  }
+
+  // Draw
+  drawBackground();
+  drawGrid();
+  drawBlocks();
+  drawItems();
+  drawAimLine();
+  drawBalls();
+  drawParticles();
+  drawFloats();
+  drawLauncher();
+  drawHUD();
+  drawStateMsg();
+}
+
+// ── Input ─────────────────────────────────────────────────────
+function getCanvasPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const src  = e.touches ? e.touches[0] : e;
+  return {
+    x: (src.clientX - rect.left) * (W / rect.width),
+    y: (src.clientY - rect.top)  * (H / rect.height),
+  };
+}
+
+canvas.addEventListener('mousemove', e => {
+  if (gameState !== 'aim') return;
+  const p = getCanvasPos(e);
+  aimTarget = p;
+  aimAngle  = calcAimAngle(p.x, p.y);
+});
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (gameState !== 'aim') return;
+  const p = getCanvasPos(e);
+  aimTarget = p;
+  aimAngle  = calcAimAngle(p.x, p.y);
+}, { passive: false });
+
+canvas.addEventListener('click', e => {
+  if (gameState !== 'aim') return;
+  const p = getCanvasPos(e);
+  const a = calcAimAngle(p.x, p.y);
+  if (a === null) return;
+  aimAngle = a;
+  fireBalls();
+});
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  if (gameState !== 'aim') return;
+  if (!aimAngle) return;
+  fireBalls();
+}, { passive: false });
+
+// ── Overlays ──────────────────────────────────────────────────
+function hideOverlays() {
+  document.querySelectorAll('.overlay').forEach(o => o.classList.remove('show'));
+}
+
+function updateStartScreen() {
+  const logado = !!supaUser && !!supaProfile;
+  if (logado) { showDashboard(); return; }
+  hideOverlays();
+  document.getElementById('ovStart').classList.add('show');
+  document.getElementById('startBtnsLogado').style.display    = 'none';
+  document.getElementById('startBtnsDeslogado').style.display = 'flex';
+}
+
+function showAuth(tab) {
+  hideOverlays();
+  document.getElementById('ovAuth').classList.add('show');
+  switchTab(tab || 'login');
+}
+function switchTab(tab) {
+  const isL = tab === 'login';
+  document.getElementById('formLogin').style.display  = isL ? 'flex' : 'none';
+  document.getElementById('formSignup').style.display = isL ? 'none' : 'flex';
+  document.getElementById('tabLogin').classList.toggle('active', isL);
+  document.getElementById('tabSignup').classList.toggle('active', !isL);
+  document.getElementById('loginMsg').textContent  = '';
+  document.getElementById('signupMsg').textContent = '';
+}
+function setMsg(id, msg, err) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className   = 'auth-msg ' + (err ? 'err' : 'ok');
+}
+
+// ── SUPABASE ──────────────────────────────────────────────────
+const SUPA_URL = 'https://tzxdkkoajxwgkphzixyr.supabase.co';
+const SUPA_KEY = 'sb_publishable_7T9duH_ZzV7eOywjYPekTg_zLOk9bDx';
+const supa = window.supabase.createClient(SUPA_URL, SUPA_KEY);
+
+let supaUser    = null;
+let supaProfile = null;
+
+async function doSignUp() {
+  const username = document.getElementById('signupUser').value.trim();
+  const email    = document.getElementById('signupEmail').value.trim();
+  const pass     = document.getElementById('signupPass').value;
+  if (username.length < 2) return setMsg('signupMsg', 'Nome mínimo 2 caracteres.', true);
+  if (!email)              return setMsg('signupMsg', 'Informe o e-mail.', true);
+  if (pass.length < 6)     return setMsg('signupMsg', 'Senha mínimo 6 caracteres.', true);
+  setMsg('signupMsg', 'Criando conta...', false);
+  const { data, error } = await supa.auth.signUp({ email, password: pass });
+  if (error) return setMsg('signupMsg', error.message, true);
+  const uid = data.user.id;
+  const { error: pe } = await supa.from('profiles').insert({ id: uid, username });
+  if (pe) return setMsg('signupMsg', 'Erro ao criar perfil.', true);
+  await supa.from('bb_scores').insert({ user_id: uid, best_round: 0, best_score: 0 });
+  supaUser = data.user; supaProfile = { username };
+  setMsg('signupMsg', '✅ Bem-vindo, ' + username + '!', false);
+  setTimeout(() => showDashboard(), 1400);
+}
+
+async function doSignIn() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass  = document.getElementById('loginPass').value;
+  if (!email || !pass) return setMsg('loginMsg', 'Preencha e-mail e senha.', true);
+  setMsg('loginMsg', 'Entrando...', false);
+  const { data, error } = await supa.auth.signInWithPassword({ email, password: pass });
+  if (error) return setMsg('loginMsg', error.message, true);
+  supaUser = data.user;
+  await loadProfile();
+  setMsg('loginMsg', '✅ Bem-vindo, ' + (supaProfile?.username || '') + '!', false);
+  setTimeout(() => showDashboard(), 1200);
+}
+
+async function doSignOut() {
+  await supa.auth.signOut();
+  supaUser = null; supaProfile = null;
+  hideOverlays();
+  document.getElementById('ovStart').classList.add('show');
+  document.getElementById('startBtnsLogado').style.display    = 'none';
+  document.getElementById('startBtnsDeslogado').style.display = 'flex';
+}
+
+async function loadProfile() {
+  if (!supaUser) return;
+  const { data } = await supa.from('profiles').select('username').eq('id', supaUser.id).single();
+  supaProfile = data || null;
+}
+
+async function saveScoreCloud() {
+  if (!supaUser) return;
+  const { data: ex } = await supa.from('bb_scores').select('best_round,best_score').eq('user_id', supaUser.id).single();
+  const payload = {
+    user_id:    supaUser.id,
+    best_round: ex ? Math.max(ex.best_round, round - 1) : round - 1,
+    best_score: ex ? Math.max(ex.best_score, score)    : score,
+    updated_at: new Date().toISOString(),
+  };
+  await supa.from('bb_scores').upsert(payload, { onConflict: 'user_id' });
+}
+
+async function showDashboard() {
+  hideOverlays();
+  document.getElementById('ovDashboard').classList.add('show');
+  document.getElementById('dashName').textContent = supaProfile?.username || '—';
+  document.getElementById('dashRankList').innerHTML = '<div class="ov-sub">Carregando...</div>';
+
+  const { data, error } = await supa
+    .from('bb_scores')
+    .select('user_id, best_round, best_score, profiles(username)')
+    .order('best_score', { ascending: false });
+
+  if (error || !data || data.length === 0) {
+    document.getElementById('dashRankList').innerHTML = '<div class="ov-sub" style="color:rgba(255,255,255,0.3)">Nenhum score ainda. Seja o primeiro!</div>';
+    // Still show player card
+    document.getElementById('dashPos').textContent = '—';
+    document.getElementById('dashBestRound').textContent = bestRound;
+    document.getElementById('dashBestScore').textContent = highScore;
+    return;
+  }
+
+  const myIdx = data.findIndex(r => r.user_id === supaUser?.id);
+  const myPos = myIdx >= 0 ? myIdx + 1 : null;
+  const myRow = myIdx >= 0 ? data[myIdx] : null;
+  const medals = ['gold', 'silver', 'bronze'];
+
+  // Player card
+  const badge = document.getElementById('dashBadge');
+  badge.className = 'dash-badge ' + (myPos ? (medals[myPos - 1] || '') : '');
+  document.getElementById('dashPos').textContent        = myPos ? myPos + '°' : '—';
+  document.getElementById('dashBestRound').textContent  = myRow?.best_round ?? bestRound;
+  document.getElementById('dashBestScore').textContent  = myRow?.best_score ?? highScore;
+
+  // Ranking
+  document.getElementById('dashRankList').innerHTML = data.slice(0, 10).map((row, i) => {
+    const name  = row.profiles?.username || 'Desconhecido';
+    const isMe  = row.user_id === supaUser?.id;
+    const pc    = medals[i] || '';
+    return `<div class="rr ${isMe ? 'me' : ''}">
+      <span class="rr-pos ${pc}">${i + 1}°</span>
+      <span class="rr-name">${name}${isMe ? ' 👈' : ''}</span>
+      <span class="rr-round">R${row.best_round}</span>
+      <span class="rr-score">${row.best_score}pts</span>
+    </div>`;
+  }).join('');
+
+  if (myPos && myPos > 10) {
+    document.getElementById('dashRankList').innerHTML += `
+      <div style="text-align:center;font-size:0.6rem;color:rgba(255,255,255,0.25);padding:4px 0">• • •</div>
+      <div class="rr me">
+        <span class="rr-pos">${myPos}°</span>
+        <span class="rr-name">${supaProfile.username} 👈</span>
+        <span class="rr-round">R${myRow.best_round}</span>
+        <span class="rr-score">${myRow.best_score}pts</span>
+      </div>`;
+  }
+}
+
+// ── Resize ────────────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  setupCanvas();
+  launcherX = launcherXTarget = W / 2;
+  if (gameState !== 'aim' && gameState !== 'menu') {
+    // Adjust launcher position proportionally (best effort)
+  }
+});
+
+// ── Boot ──────────────────────────────────────────────────────
+setupCanvas();
+highScore = parseInt(localStorage.getItem('bbHigh')  || '0');
+bestRound = parseInt(localStorage.getItem('bbRound') || '0');
+
+// Start the canvas loop (renders menu background)
+frameId = requestAnimationFrame(loop);
+
+// Auto-login check
+(async () => {
+  const { data: { session } } = await supa.auth.getSession();
+  if (session) {
+    supaUser = session.user;
+    await loadProfile();
+  }
+  updateStartScreen();
+})();
+</script>
+</body>
+</html>
