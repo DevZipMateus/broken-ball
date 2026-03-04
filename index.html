@@ -515,6 +515,8 @@ function checkBlockCollisions(ball) {
   const c1 = Math.max(0,        Math.floor((ball.x - BALL_R) / CELL));
   const c2 = Math.min(COLS - 1, Math.floor((ball.x + BALL_R) / CELL));
 
+  let reflected = false;
+
   for (let r = r1; r <= r2; r++) {
     for (let c = c1; c <= c2; c++) {
       const blk = grid[r][c];
@@ -522,18 +524,21 @@ function checkBlockCollisions(ball) {
       const bx = c * CELL, by = TOP_H + r * CELL;
       if (!circleAABB(ball.x, ball.y, BALL_R, bx, by, CELL, CELL)) continue;
 
-      // Determine reflection axis
-      const oL = (ball.x + BALL_R) - bx;
-      const oR = (bx + CELL) - (ball.x - BALL_R);
-      const oT = (ball.y + BALL_R) - by;
-      const oB = (by + CELL) - (ball.y - BALL_R);
-      const mo = Math.min(oL, oR, oT, oB);
+      // Reflete apenas uma vez (na junção de 2+ blocos todos tomam dano, ricochete único)
+      if (!reflected) {
+        const oL = (ball.x + BALL_R) - bx;
+        const oR = (bx + CELL) - (ball.x - BALL_R);
+        const oT = (ball.y + BALL_R) - by;
+        const oB = (by + CELL) - (ball.y - BALL_R);
+        const mo = Math.min(oL, oR, oT, oB);
+        if (mo === oT) { ball.vy = -Math.abs(ball.vy); ball.y = by - BALL_R; }
+        else if (mo === oB) { ball.vy =  Math.abs(ball.vy); ball.y = by + CELL + BALL_R; }
+        else if (mo === oL) { ball.vx = -Math.abs(ball.vx); ball.x = bx - BALL_R; }
+        else                { ball.vx =  Math.abs(ball.vx); ball.x = bx + CELL + BALL_R; }
+        reflected = true;
+      }
 
-      if (mo === oT) { ball.vy = -Math.abs(ball.vy); ball.y = by - BALL_R; }
-      else if (mo === oB) { ball.vy =  Math.abs(ball.vy); ball.y = by + CELL + BALL_R; }
-      else if (mo === oL) { ball.vx = -Math.abs(ball.vx); ball.x = bx - BALL_R; }
-      else               { ball.vx =  Math.abs(ball.vx); ball.x = bx + CELL + BALL_R; }
-
+      // Dano em TODOS os blocos sobrepostos
       const tier = blockColor(blk.hp);
       spawnHitParticles(bx + CELL / 2, by + CELL / 2, tier.color);
       blk.hp--;
@@ -544,14 +549,12 @@ function checkBlockCollisions(ball) {
         spawnBreakParticles(bx + CELL / 2, by + CELL / 2, tier.color);
         addFloat('+' + round, bx + CELL / 2, by + CELL / 2, tier.color);
         score += round;
-        // Bônus escondido: ganha +1 bola imediatamente ao quebrar
         if (blk.hasBall) {
           collectedBalls++;
           spawnCollectParticles(bx + CELL / 2, by + CELL / 2);
           addFloat('+1 🔵', bx + CELL / 2, by + CELL / 2 - 18, '#00e5ff');
         }
       }
-      return; // one collision per ball per frame
     }
   }
 }
