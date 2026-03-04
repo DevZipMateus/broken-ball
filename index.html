@@ -540,12 +540,16 @@ function checkBlockCollisions(ball) {
       score++;
 
       if (blk.hp <= 0) {
-        // Se tinha bônus escondido, revela o item coletável na célula
-        if (blk.hasBall) items[r][c] = true;
         grid[r][c] = null;
         spawnBreakParticles(bx + CELL / 2, by + CELL / 2, tier.color);
         addFloat('+' + round, bx + CELL / 2, by + CELL / 2, tier.color);
         score += round;
+        // Bônus escondido: ganha +1 bola imediatamente ao quebrar
+        if (blk.hasBall) {
+          collectedBalls++;
+          spawnCollectParticles(bx + CELL / 2, by + CELL / 2);
+          addFloat('+1 🔵', bx + CELL / 2, by + CELL / 2 - 18, '#00e5ff');
+        }
       }
       return; // one collision per ball per frame
     }
