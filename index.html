@@ -120,19 +120,10 @@
     .bonus-info { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 300px; background: rgba(255,100,0,0.07); border: 1px solid rgba(255,100,0,0.25); border-radius: 12px; padding: 12px 16px; }
     .bonus-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; color: rgba(255,255,255,0.7); }
     .bonus-row strong { color: #ff9933; }
-    #btnRecall {
-      display: none; position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
-      padding: 10px 36px; border-radius: 50px;
-      background: rgba(0,212,255,0.12); border: 2px solid #00d4ff; color: #00d4ff;
-      font-family: inherit; font-size: 0.82rem; font-weight: 900; letter-spacing: 0.08em;
-      cursor: pointer; z-index: 10; transition: 0.15s; white-space: nowrap;
-    }
-    #btnRecall:hover { background: rgba(0,212,255,0.28); }
   </style>
 </head>
 <body>
 <div id="app"><canvas id="canvas"></canvas></div>
-<button id="btnRecall" onclick="recallBalls()">⬇ RECOLHER</button>
 
 <!-- ══ Start ══ -->
 <div class="overlay show" id="ovStart">
@@ -358,7 +349,7 @@ let grid=[], balls=[], particles=[], floatTexts=[];
 let launcherX=0, launcherXTarget=0, aimAngle=null;
 let ballsFired=0, ballsReturned=0, firstReturnX=null;
 let launchTimer=0, frameId=null, lastTs=0;
-let shootElapsed=0, currentSpeedMult=1;
+let shootElapsed=0, currentSpeedFactor=1.75;
 
 // ── Geração Procedural ────────────────────────────────────────
 function generateLevel(lvIdx) {
@@ -510,11 +501,12 @@ function goToMenu() {
 function fireBalls() {
   if (!aimAngle) return;
   gameState='firing'; ballsFired=0; ballsReturned=0; launchTimer=0; firstReturnX=null;
-  shootElapsed=0; currentSpeedMult=1;
+  shootElapsed=0; currentSpeedFactor=1.75;
 }
 
 function launchOneBall() {
-  balls.push({ x:launcherX, y:FLOOR_Y-BALL_R-1, vx:Math.cos(aimAngle)*BALL_SPEED, vy:Math.sin(aimAngle)*BALL_SPEED, active:true, trail:[] });
+  const spd=BALL_SPEED*currentSpeedFactor;
+  balls.push({ x:launcherX, y:FLOOR_Y-BALL_R-1, vx:Math.cos(aimAngle)*spd, vy:Math.sin(aimAngle)*spd, active:true, trail:[] });
   ballsFired++;
 }
 
@@ -973,6 +965,25 @@ function drawStateMsg2(){
   }
 }
 
+function getRecallBtnRect(){
+  const bw=148,bh=34;
+  return{x:W/2-bw/2,y:FLOOR_Y+6,w:bw,h:bh};
+}
+
+function drawRecallBtn(){
+  if(gameState!=='firing'&&gameState!=='simulating') return;
+  const{x,y,w,h}=getRecallBtnRect();
+  ctx.save();
+  ctx.shadowColor='#00d4ff';ctx.shadowBlur=12;
+  rr(x,y,w,h,17);ctx.fillStyle='rgba(0,212,255,0.15)';ctx.fill();
+  ctx.strokeStyle='#00d4ff';ctx.lineWidth=1.8;ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle='#00d4ff';
+  ctx.font=`900 13px 'Arial Rounded MT Bold',Arial,sans-serif`;
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('⬇  RECOLHER',W/2,y+h/2);
+}
+
 // ── Loop ──────────────────────────────────────────────────────
 function loop(ts){
   frameId=requestAnimationFrame(loop);
@@ -984,26 +995,34 @@ function loop(ts){
   }
   if(gameState==='firing'||gameState==='simulating'){
     shootElapsed+=dt;
-    const newMult=shootElapsed>=12?4:shootElapsed>=6?3:1;
-    if(newMult!==currentSpeedMult){
-      const ratio=newMult/currentSpeedMult;
+    const targetFactor=shootElapsed>=12?4:shootElapsed>=6?3:1.75;
+    if(targetFactor!==currentSpeedFactor){
+      const ratio=targetFactor/currentSpeedFactor;
       for(const b of balls)if(b.active){b.vx*=ratio;b.vy*=ratio;}
-      currentSpeedMult=newMult;
-      addFloat(newMult+'x ⚡',W/2,FLOOR_Y-50,'#ffff00');
+      currentSpeedFactor=targetFactor;
+      addFloat(targetFactor+'x ⚡',W/2,FLOOR_Y-50,'#ffff00');
     }
   }
-  const _rb=document.getElementById('btnRecall');
-  if(_rb)_rb.style.display=(gameState==='firing'||gameState==='simulating')?'block':'none';
   if(gameState!=='menu'){updateBalls(dt);updateParticles(dt);updateFloats(dt);}
-  drawBG();drawGrid2();drawBlocks2();drawAimLine2();drawBalls2();drawParticles2();drawFloats2();drawLauncher2();drawHUD2();drawStateMsg2();
+  drawBG();drawGrid2();drawBlocks2();drawAimLine2();drawBalls2();drawParticles2();drawFloats2();drawLauncher2();drawHUD2();drawStateMsg2();drawRecallBtn();
 }
 
 // ── Input ─────────────────────────────────────────────────────
-function getPos(e){const r=canvas.getBoundingClientRect(),s=e.touches?e.touches[0]:e;return{x:(s.clientX-r.left)*(W/r.width),y:(s.clientY-r.top)*(H/r.height)};}
+function getPos(e,changed){const r=canvas.getBoundingClientRect();const src=changed?(e.changedTouches?e.changedTouches[0]:e):(e.touches?e.touches[0]:e);return{x:(src.clientX-r.left)*(W/r.width),y:(src.clientY-r.top)*(H/r.height)};}
+function hitRecall(p){const b=getRecallBtnRect();return p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h;}
 canvas.addEventListener('mousemove',e=>{if(gameState!=='aim')return;const p=getPos(e);aimAngle=calcAngle(p.x,p.y);});
 canvas.addEventListener('touchmove',e=>{e.preventDefault();if(gameState!=='aim')return;const p=getPos(e);aimAngle=calcAngle(p.x,p.y);},{passive:false});
-canvas.addEventListener('click',e=>{if(gameState!=='aim')return;const p=getPos(e);const a=calcAngle(p.x,p.y);if(!a)return;aimAngle=a;fireBalls();});
-canvas.addEventListener('touchend',e=>{e.preventDefault();if(gameState!=='aim'||!aimAngle)return;fireBalls();},{passive:false});
+canvas.addEventListener('click',e=>{
+  const p=getPos(e);
+  if((gameState==='firing'||gameState==='simulating')&&hitRecall(p)){recallBalls();return;}
+  if(gameState!=='aim')return;const a=calcAngle(p.x,p.y);if(!a)return;aimAngle=a;fireBalls();
+});
+canvas.addEventListener('touchend',e=>{
+  e.preventDefault();
+  const p=getPos(e,true);
+  if((gameState==='firing'||gameState==='simulating')&&hitRecall(p)){recallBalls();return;}
+  if(gameState!=='aim'||!aimAngle)return;fireBalls();
+},{passive:false});
 
 // ── Overlays ──────────────────────────────────────────────────
 function hideOverlays(){document.querySelectorAll('.overlay').forEach(o=>o.classList.remove('show'));}
