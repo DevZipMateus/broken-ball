@@ -674,20 +674,27 @@ function checkBlocks(ball) {
   const r2=Math.min(ROWS-1,Math.floor((ball.y+BALL_R-TOP_H)/CELL));
   const c1=Math.max(0,Math.floor((ball.x-BALL_R)/CELL));
   const c2=Math.min(COLS-1,Math.floor((ball.x+BALL_R)/CELL));
-  let reflected=false;
+
+  // 1) Coleta todos os blocos tocados ANTES de mover a bola
+  const hits=[];
   for(let r=r1;r<=r2;r++) for(let c=c1;c<=c2;c++){
     const blk=grid[r][c]; if(!blk) continue;
     const bx=c*CELL,by=TOP_H+r*CELL;
-    if(!circleAABB(ball.x,ball.y,BALL_R,bx,by,CELL,CELL)) continue;
-    if(!reflected){
-      const oL=(ball.x+BALL_R)-bx,oR=(bx+CELL)-(ball.x-BALL_R),oT=(ball.y+BALL_R)-by,oB=(by+CELL)-(ball.y-BALL_R);
-      const mo=Math.min(oL,oR,oT,oB);
-      if(mo===oT){ball.vy=-Math.abs(ball.vy);ball.y=by-BALL_R;}
-      else if(mo===oB){ball.vy=Math.abs(ball.vy);ball.y=by+CELL+BALL_R;}
-      else if(mo===oL){ball.vx=-Math.abs(ball.vx);ball.x=bx-BALL_R;}
-      else{ball.vx=Math.abs(ball.vx);ball.x=bx+CELL+BALL_R;}
-      reflected=true;
-    }
+    if(circleAABB(ball.x,ball.y,BALL_R,bx,by,CELL,CELL)) hits.push({r,c,blk,bx,by});
+  }
+  if(!hits.length) return;
+
+  // 2) Reflexão baseada no primeiro bloco atingido
+  const {bx,by}=hits[0];
+  const oL=(ball.x+BALL_R)-bx,oR=(bx+CELL)-(ball.x-BALL_R),oT=(ball.y+BALL_R)-by,oB=(by+CELL)-(ball.y-BALL_R);
+  const mo=Math.min(oL,oR,oT,oB);
+  if(mo===oT){ball.vy=-Math.abs(ball.vy);ball.y=by-BALL_R;}
+  else if(mo===oB){ball.vy=Math.abs(ball.vy);ball.y=by+CELL+BALL_R;}
+  else if(mo===oL){ball.vx=-Math.abs(ball.vx);ball.x=bx-BALL_R;}
+  else{ball.vx=Math.abs(ball.vx);ball.x=bx+CELL+BALL_R;}
+
+  // 3) Aplica dano em TODOS os blocos tocados
+  for(const {r,c,blk,bx,by} of hits){
     const tier=blockTier(blk.hp);
     spawnHit(bx+CELL/2,by+CELL/2,tier.c); blk.hp--; score++;
     if(blk.hp<=0){
