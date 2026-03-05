@@ -120,6 +120,19 @@
     .bonus-info { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 300px; background: rgba(255,100,0,0.07); border: 1px solid rgba(255,100,0,0.25); border-radius: 12px; padding: 12px 16px; }
     .bonus-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; color: rgba(255,255,255,0.7); }
     .bonus-row strong { color: #ff9933; }
+    /* Ranking público */
+    #ovRanking { padding: 16px 12px; justify-content: flex-start; overflow-y: auto; scrollbar-width: none; gap: 10px; }
+    #ovRanking::-webkit-scrollbar { display: none; }
+    .rank-list { width: 100%; max-width: 320px; display: flex; flex-direction: column; gap: 5px; }
+    .rank-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); }
+    .rank-row.top1 { border-color: rgba(255,215,0,0.4); background: rgba(255,215,0,0.06); }
+    .rank-row.top2 { border-color: rgba(204,204,204,0.35); background: rgba(204,204,204,0.04); }
+    .rank-row.top3 { border-color: rgba(205,127,50,0.35); background: rgba(205,127,50,0.04); }
+    .rank-pos  { width: 26px; text-align: center; font-size: 0.75rem; font-weight: 900; color: rgba(255,255,255,0.35); flex-shrink: 0; }
+    .rank-pos.gold { color: #ffd700; } .rank-pos.silver { color: #ccc; } .rank-pos.bronze { color: #cd7f32; }
+    .rank-name { flex: 1; font-size: 0.78rem; font-weight: 700; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rank-lvl  { font-size: 0.65rem; color: #00ffff; font-weight: 800; margin-right: 4px; }
+    .rank-sc   { font-size: 0.75rem; color: #ffc800; font-weight: 900; }
   </style>
 </head>
 <body>
@@ -132,11 +145,13 @@
   <div id="sbLogado" style="display:none;flex-direction:column;align-items:center;gap:9px;width:100%;max-width:280px">
     <button class="ov-btn accent" style="width:100%" onclick="goToCustomize()">▶ JOGAR</button>
     <button class="ov-btn cyan"   style="width:100%" id="bonusBtnStart" onclick="showBonusInfo()" style="display:none">🔥 FASE BÔNUS</button>
+    <button class="ov-btn" style="width:100%;border-color:rgba(255,200,0,0.5);color:#ffc800" onclick="showRanking()">🏆 RANKING</button>
     <button class="ov-btn dim"    onclick="showAuth('login')">Trocar conta</button>
   </div>
   <div id="sbDeslogado" style="display:flex;flex-direction:column;align-items:center;gap:9px;width:100%;max-width:280px">
     <button class="ov-btn accent" style="width:100%" onclick="goToCustomize()">▶ JOGAR</button>
     <button class="ov-btn cyan"   style="width:100%" id="bonusBtnStart2" onclick="showBonusInfo()">🔥 FASE BÔNUS</button>
+    <button class="ov-btn" style="width:100%;border-color:rgba(255,200,0,0.5);color:#ffc800" onclick="showRanking()">🏆 RANKING</button>
     <button class="ov-btn green"  onclick="showAuth('signup')">✚ CRIAR CONTA</button>
     <button class="ov-btn dim"    onclick="showAuth('login')">🔑 Entrar</button>
   </div>
@@ -238,7 +253,16 @@
   <div class="ov-stats" id="goStats"></div>
   <div style="font-size:0.8rem;font-weight:900;color:#00d4ff" id="goDia"></div>
   <button class="ov-btn" id="goRetryBtn" onclick="retryLevel()">↺ TENTAR NOVAMENTE</button>
+  <button class="ov-btn" style="border-color:rgba(255,200,0,0.5);color:#ffc800" onclick="showRanking()">🏆 RANKING</button>
   <button class="ov-btn dim" onclick="goToMenu()">← Menu</button>
+</div>
+
+<!-- ══ Ranking ══ -->
+<div class="overlay" id="ovRanking">
+  <div class="ov-title" style="font-size:1.5rem;background:linear-gradient(135deg,#ffc800,#ffdd55);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">🏆 RANKING GLOBAL</div>
+  <div class="ov-sub" id="rankSub" style="margin-bottom:4px">Carregando...</div>
+  <div class="rank-list" id="rankList"></div>
+  <button class="ov-btn dim" onclick="goToMenu()">← Voltar</button>
 </div>
 
 <script>
@@ -257,8 +281,11 @@ let W, H, CELL, TOP_H, FLOOR_Y;
 
 function setupCanvas() {
   const dpr = window.devicePixelRatio || 1;
-  W    = Math.min(window.innerWidth, 420);
-  CELL = Math.floor(W / COLS);
+  const maxW = Math.min(window.innerWidth, 420);
+  const maxH = window.innerHeight;
+  const cellByW = Math.floor(maxW / COLS);
+  const cellByH = Math.floor((maxH - 58 - 72) / ROWS); // 58=TOP_H, 72=bottom zone
+  CELL = Math.max(1, Math.min(cellByW, cellByH));
   W    = CELL * COLS;
   TOP_H   = 58;
   FLOOR_Y = TOP_H + ROWS * CELL;
@@ -1229,6 +1256,37 @@ async function showDashboard(){
   if(myPos&&myPos>10){
     document.getElementById('dashRankList').innerHTML+=`<div style="text-align:center;font-size:.6rem;color:rgba(255,255,255,.2);padding:4px 0">• • •</div><div class="rr me"><span class="rr-pos">${myPos}°</span><span class="rr-name">${supaProfile.username} 👈</span><span class="rr-lvl">F${myRow.best_level}</span><span class="rr-sc">${myRow.best_score}pts</span></div>`;
   }
+}
+
+// ── Ranking Público ──────────────────────────────────────────
+async function showRanking(){
+  if(frameId){cancelAnimationFrame(frameId);frameId=null;}
+  gameState='menu'; hideOverlays();
+  document.getElementById('ovRanking').classList.add('show');
+  document.getElementById('rankSub').textContent='Carregando...';
+  document.getElementById('rankList').innerHTML='';
+  const{data,error}=await supa.from('bb_scores')
+    .select('user_id,best_score,best_level,profiles(username)')
+    .order('best_score',{ascending:false})
+    .limit(30);
+  if(error||!data||!data.length){
+    document.getElementById('rankSub').textContent='Nenhum jogador ainda.';
+    return;
+  }
+  const medals=['gold','silver','bronze'];
+  const topCls=['top1','top2','top3'];
+  document.getElementById('rankSub').textContent=`${data.length} jogadores`;
+  document.getElementById('rankList').innerHTML=data.map((row,i)=>{
+    const name=row.profiles?.username||'Anônimo';
+    const isMe=supaUser&&row.user_id===supaUser.id;
+    const pc=medals[i]||''; const tc=topCls[i]||'';
+    return `<div class="rank-row ${tc}${isMe?' top1':''}">
+      <span class="rank-pos ${pc}">${i+1}°</span>
+      <span class="rank-name">${name}${isMe?' 👈':''}</span>
+      <span class="rank-lvl">F${row.best_level}</span>
+      <span class="rank-sc">${row.best_score}pts</span>
+    </div>`;
+  }).join('');
 }
 
 // ── Resize ────────────────────────────────────────────────────
